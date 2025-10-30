@@ -80,14 +80,12 @@ vector<int> Atkin(int limit) {
 }
 
 // --- Тест Люка–Лемера для числа Мерсенна ---
-bool lucasLehmerTest(int p) {
+bool lucasLehmerTest(const BigInt& M_p, int p) {
     if (p == 2) return true;
-    BigInt Mp = BigInt("2").power(p).subtraction(BigInt("1"));
-
     BigInt s("4");
     for (int i = 0; i < p - 2; i++) {
         s = s.multiplication(s).subtraction(BigInt("2"));
-        s = s.mod(Mp);
+        s = s.mod(M_p);
     }
     return (s.toString() == "0");
 }
