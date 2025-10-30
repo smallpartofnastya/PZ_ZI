@@ -143,89 +143,75 @@ BigInt BigInt::division(const BigInt& num_b) const {
 
 */
 
-// Быстрое умножение (O(n²), но с 64-битами)
+// --- Быстрое умножение двух BigInt ---
 BigInt BigInt::multiplication(const BigInt& num_b) const {
-    BigInt res;
-    res.digits.assign(digits.size() + num_b.digits.size(), 0);
-    for (size_t i = 0; i < digits.size(); i++) {
-        unsigned long long carry = 0;
-        for (size_t j = 0; j < num_b.digits.size() || carry; j++) {
-            unsigned long long cur = res.digits[i + j] +
-                1ULL * digits[i] * (j < num_b.digits.size() ? num_b.digits[j] : 0ULL) + carry;
-            res.digits[i + j] = int(cur % BASE);
+    // Если одно из чисел = 0
+    if ((digits.size() == 1 && digits[0] == 0) || 
+        (num_b.digits.size() == 1 && num_b.digits[0] == 0))
+        return BigInt("0");
+
+    const vector<int>& a = digits;
+    const vector<int>& b = num_b.digits;
+    vector<long long> temp(a.size() + b.size(), 0);
+
+    for (size_t i = 0; i < a.size(); i++) {
+        long long carry = 0;
+        for (size_t j = 0; j < b.size() || carry; j++) {
+            long long cur = temp[i + j] + 1LL * a[i] * (j < b.size() ? b[j] : 0) + carry;
+            temp[i + j] = cur % BASE;
             carry = cur / BASE;
         }
     }
-    res.removeLeadingZeros();
-    return res;
+
+    BigInt result;
+    result.digits.resize(temp.size());
+    for (size_t i = 0; i < temp.size(); i++) result.digits[i] = (int)temp[i];
+    result.removeLeadingZeros();
+    return result;
 }
 
-// Быстрое деление (с нормализацией)
+// --- Быстрое деление: num_a / num_b ---
 BigInt BigInt::division(const BigInt& num_b) const {
-    if (num_b.compare(BigInt("0")) == 0) throw runtime_error("Division by zero");
-    if (compare(num_b) < 0) return BigInt("0");
+    if (num_b.digits.size() == 1 && num_b.digits[0] == 0)
+        throw runtime_error("Division by zero");
 
-    BigInt res, cur;
-    res.digits.resize(digits.size());
+    if (this->compare(num_b) < 0)
+        return BigInt("0");
+
+    BigInt result, cur;
+    result.digits.resize(digits.size());
+    cur.digits.clear();
 
     for (int i = (int)digits.size() - 1; i >= 0; i--) {
         cur.digits.insert(cur.digits.begin(), digits[i]);
         cur.removeLeadingZeros();
 
-        int l = 0, r = BASE - 1, x = 0;
-        while (l <= r) {
-            int m = (l + r) / 2;
-            BigInt prod = num_b.multiplication(BigInt(to_string(m)));
-            if (prod.compare(cur) <= 0) { x = m; l = m + 1; } else r = m - 1;
-        }
-        res.digits[i] = x;
-        cur = cur.subtraction(num_b.multiplication(BigInt(to_string(x))));
-    }
-
-    res.removeLeadingZeros();
-    return res;
-}
-
-// Остаток: num_a % num_b
-BigInt BigInt::mod(const BigInt& num_b) const {
-// Если num_b = 0 → ошибка (деление на ноль)
-    if (num_b.digits.size() == 1 && num_b.digits[0] == 0) {
-        throw runtime_error("Division by zero");
-    }
-
-    // Если num_a < num_b → результат равен 0
-    if (this->compare(num_b) < 0) {
-        return *this;
-    }
-
-    BigInt result, curValue;
-    result.digits.resize(digits.size());
-
-    for (int i = (int)digits.size() - 1; i >= 0; i--) {
-        // Сдвигаем "остаток"
-        curValue.digits.insert(curValue.digits.begin(), digits[i]);
-        curValue.removeLeadingZeros();
-
-        // Подбираем максимальное x такое, что num_b * x <= curValue
+        // Быстрая оценка частного по старшим блокам
         int x = 0, left = 0, right = BASE - 1;
-        while (left <= right) {
-            int mid = (left + right) / 2;
-            BigInt cur = num_b.multiplication(BigInt(to_string(mid)));
-            if (cur.compare(curValue) <= 0) {
-                x = mid;
-                left = mid + 1;
-            } else {
-                right = mid - 1;
-            }
+        if (cur.compare(num_b) >= 0) {
+            // Используем верхние 2 блока делимого и делителя
+            long long cur_top = (cur.digits.back() * 1LL * BASE) +
+                                 (cur.digits.size() > 1 ? cur.digits[cur.digits.size() - 2] : 0);
+            long long div_top = (num_b.digits.back() * 1LL * BASE) +
+                                 (num_b.digits.size() > 1 ? num_b.digits[num_b.digits.size() - 2] : 0);
+            x = int(min(cur_top / div_top, (long long)BASE - 1));
         }
 
+        // Коррекция x
+        BigInt mult = num_b.multiplication(BigInt(to_string(x)));
+        while (mult.compare(cur) > 0) {
+            x--;
+            mult = num_b.multiplication(BigInt(to_string(x)));
+        }
+
+        cur = cur.subtraction(mult);
         result.digits[i] = x;
-        curValue = curValue.subtraction(num_b.multiplication(BigInt(to_string(x))));
     }
 
     result.removeLeadingZeros();
-    return curValue;
+    return result;
 }
+
 
 
 // Сравнение: -1 если num_a < num_b, 0 если равно, 1 если больше
